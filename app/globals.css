@@ -1,26 +1,34 @@
 @import "tailwindcss";
+@import "tw-animate-css";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@layer base {
+  /* Reset handling */
+  * {
+    @apply box-border m-0 p-0;
+  }
+  
+  body {
+    @apply h-screen;
+  }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  /* Applying your Rubik font logic globally via the font variable we set in layout */
+  p {
+    @apply font-black pb-2.5 text-inherit;
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  /* Migrating your .pnrForm label styles to a reusable utility class if you want, 
+     or keeping it as a component class */
+  .custom-file-label {
+    @apply bg-[#ffa32a] border-none rounded-[5px] text-white cursor-pointer inline-block 
+           font-medium mb-4 outline-none py-4 px-12.5 relative 
+           transition-all duration-300 align-middle hover:mt-1.25 hover:duration-0;
+  }
+
+  /* Accessible File Input Hide Hack */
+  .sr-only-input {
+    @apply absolute w-px h-px p-0 -m-px overflow-hidden whitespace-nowrap border-0;
+    clip: rect(0, 0, 0, 0);
+  }
 }
