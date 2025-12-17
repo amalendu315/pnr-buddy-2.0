@@ -124,10 +124,42 @@ export default function FlightOpsPage() {
 
   const handleCopy = () => {
     if (flightData.length > 0) {
-      navigator.clipboard
-        .writeText(flightData.join("\n"))
-        .then(() => toast.success("Copied to clipboard"))
-        .catch(() => toast.error("Failed to copy"));
+      const textToCopy = flightData.join("\n");
+
+      // Check if the modern API is available (Secure Context)
+      if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard
+          .writeText(textToCopy)
+          .then(() => toast.success("Copied to clipboard"))
+          .catch(() => toast.error("Failed to copy"));
+      } else {
+        // Fallback for HTTP Hosting (EC2 IP Address)
+        const textArea = document.createElement("textarea");
+        textArea.value = textToCopy;
+
+        // Make it invisible but part of the DOM
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "0";
+        document.body.appendChild(textArea);
+
+        textArea.focus();
+        textArea.select();
+
+        try {
+          const successful = document.execCommand("copy");
+          if (successful) {
+            toast.success("Copied to clipboard");
+          } else {
+            toast.error("Failed to copy");
+          }
+        } catch (err) {
+          console.error("Fallback copy failed", err);
+          toast.error("Failed to copy");
+        }
+
+        document.body.removeChild(textArea);
+      }
     }
   };
 
