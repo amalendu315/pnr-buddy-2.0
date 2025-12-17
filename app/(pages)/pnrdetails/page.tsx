@@ -576,12 +576,45 @@ export default function PnrDetailsPage() {
     }
   };
 
-  const handleCopy = () => {
-    if (flightData) {
-      navigator.clipboard
-        .writeText(flightData)
-        .then(() => toast.success("Copied to clipboard!"))
-        .catch(() => toast.error("Failed to copy"));
+  const handleCopy = async () => {
+    if (!flightData) return;
+
+    // Check if the modern API is available (Secure Context)
+    if (navigator.clipboard && window.isSecureContext) {
+      try {
+        await navigator.clipboard.writeText(flightData);
+        toast.success("Copied to clipboard!");
+      } catch (err) {
+        console.error("Copy failed", err);
+        toast.error("Failed to copy");
+      }
+    } else {
+      // Fallback for HTTP (EC2 IP Address)
+      const textArea = document.createElement("textarea");
+      textArea.value = flightData;
+
+      // Make it invisible but part of the DOM
+      textArea.style.position = "fixed";
+      textArea.style.left = "-9999px";
+      textArea.style.top = "0";
+      document.body.appendChild(textArea);
+
+      textArea.focus();
+      textArea.select();
+
+      try {
+        const successful = document.execCommand("copy");
+        if (successful) {
+          toast.success("Copied to clipboard!");
+        } else {
+          toast.error("Failed to copy");
+        }
+      } catch (err) {
+        console.error("Fallback copy failed", err);
+        toast.error("Failed to copy");
+      }
+
+      document.body.removeChild(textArea);
     }
   };
 
@@ -654,7 +687,7 @@ export default function PnrDetailsPage() {
                 </div>
 
                 {/* List of Saved Emails */}
-                <div className="mt-4 max-h-[300px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+                <div className="mt-4 max-h-75 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
                   {savedEmails.length === 0 ? (
                     <p className="text-sm text-slate-400 text-center py-4">
                       No custom emails saved yet.
@@ -805,8 +838,14 @@ export default function PnrDetailsPage() {
       </Card>
 
       {/* RIGHT COLUMN: RESULTS */}
-      <Card className="w-full xl:flex-1 border-0 shadow-2xl bg-white/95 backdrop-blur ring-1 ring-slate-900/5 flex flex-col min-h-150 max-h-225">
-        <CardHeader className="border-b border-slate-100 bg-white/50 px-6 py-5">
+      {/* RIGHT COLUMN: RESULTS - SCROLL FIXED */}
+      {/* Changes made for Scroll:
+          1. Removed fixed height limitation on Card so it respects screen or flex. 
+          2. Added h-[800px] as a baseline, but max-h for screen fit.
+          3. CardContent now has min-h-0 to allow flex shrinking/scrolling.
+      */}
+      <Card className="w-full xl:flex-1 border-0 shadow-2xl bg-white/95 backdrop-blur ring-1 ring-slate-900/5 flex flex-col h-150 xl:h-187.5">
+        <CardHeader className="border-b border-slate-100 bg-white/50 px-6 py-5 shrink-0">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-3">
               <div className="p-2 bg-slate-100 rounded-md text-slate-600">
@@ -836,7 +875,10 @@ export default function PnrDetailsPage() {
           </div>
         </CardHeader>
 
-        <CardContent className="grow p-0 overflow-hidden relative bg-slate-50/50">
+        {/* FIXED: min-h-0 is critical for flex children to scroll.
+           Removed 'grow' blindly, replaced with flex-1 and overflow-hidden on container.
+        */}
+        <CardContent className="flex-1 min-h-0 p-0 relative bg-slate-50/50 overflow-hidden">
           {/* Empty State */}
           {!flightData && !errors && !isLoading && (
             <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 space-y-4">
@@ -873,7 +915,7 @@ export default function PnrDetailsPage() {
 
           {/* Error Display */}
           {errors && (
-            <div className="p-6">
+            <div className="p-6 h-full overflow-y-auto">
               <Alert
                 variant="destructive"
                 className="bg-red-50 border-red-200 text-red-900 shadow-sm"
@@ -889,9 +931,9 @@ export default function PnrDetailsPage() {
             </div>
           )}
 
-          {/* Success Data Display (Terminal Style) */}
+          {/* Success Data Display (Terminal Style) - FIXED SCROLLING */}
           {flightData && (
-            <div className="h-full overflow-auto custom-scrollbar bg-slate-900 text-slate-50 p-6 font-mono text-sm leading-relaxed selection:bg-indigo-500/30">
+            <div className="h-full w-full overflow-y-auto custom-scrollbar bg-slate-900 text-slate-50 p-6 font-mono text-sm leading-relaxed selection:bg-indigo-500/30">
               <pre className="whitespace-pre-wrap break-all shadow-none outline-none">
                 {flightData}
               </pre>
@@ -900,7 +942,7 @@ export default function PnrDetailsPage() {
         </CardContent>
 
         {flightData && (
-          <CardFooter className="bg-white border-t border-slate-100 py-3 flex justify-between items-center text-xs text-slate-400">
+          <CardFooter className="bg-white border-t border-slate-100 py-3 flex justify-between items-center text-xs text-slate-400 shrink-0">
             <div className="flex items-center gap-2">
               <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
               <span>Sync Complete</span>
