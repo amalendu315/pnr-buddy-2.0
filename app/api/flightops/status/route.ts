@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import https from "https";
 import axios, { AxiosResponse } from "axios";
 import * as XLSX from "xlsx";
 import moment from "moment-timezone";
@@ -17,15 +16,39 @@ import {
 // ==========================================
 
 const checkTimeFormat = (text: string): string => {
-  if (
-    text.charAt(0) === "0" ||
-    text.slice(0, 2) === "11" ||
-    text.slice(0, 2) === "10"
-  ) {
-    return text.concat(" ", "AM");
-  } else {
-    return text.concat(" ", "PM");
-  }
+  if (!text) return "";
+
+  // Split time into hours and minutes
+  const parts = text.split(":");
+  let hour = parseInt(parts[0]);
+  const minute = parts[1];
+
+  // Determine AM or PM
+  const suffix = hour >= 12 ? "PM" : "AM";
+
+  // Convert 24h to 12h
+  hour = hour % 12;
+  hour = hour ? hour : 12; // the hour '0' should be '12'
+
+  // Pad with leading zero if needed (e.g., 2 -> 02)
+  const paddedHour = hour < 10 ? "0" + hour : hour;
+
+  return `${paddedHour}:${minute} ${suffix}`;
+};
+
+// HELPER: Format Time from Excel Input (The key fix)
+const formatExcelTime = (inputTime: any) => {
+  const date = moment(inputTime);
+
+  // Rounding Logic
+  const minute = date.minutes();
+  const lastDigit = minute % 10;
+  const roundedMinutes =
+    lastDigit === 0 || lastDigit === 5 ? minute : minute + 1;
+  date.minutes(roundedMinutes);
+
+  // FIX: Change 'HH' to 'hh' for 12-hour format
+  return date.format("hh:mm A");
 };
 
 // ==========================================
@@ -41,7 +64,8 @@ const AkasaTokenConfig = {
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
   },
   data: JSON.stringify({ clientType: "WEB" }),
-  httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+  // Remove httpsAgent for Vercel/Next.js (Edge/Serverless doesn't support it well)
+  // If you are on Node, you can keep it, but axios default usually works.
 };
 
 async function fetchAkasaToken(
@@ -72,10 +96,8 @@ async function processAkasaFile(buffer: Buffer) {
   const myToken = data?.data?.token;
   const header = `Bearer ${myToken}`;
 
-  // Read Excel from Buffer
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]]; // Default to first sheet
-  // ws["!ref"] = "A1:K3000"; // Optional: Force range if needed
+  const ws = wb.Sheets[wb.SheetNames[0]];
   const jsonSheet: any[] = XLSX.utils.sheet_to_json(ws);
 
   const chunkSize = 30;
@@ -97,7 +119,6 @@ async function processAkasaFile(buffer: Buffer) {
             "User-Agent":
               "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
           },
-          httpsAgent: new https.Agent({ rejectUnauthorized: false }),
         };
 
         let response: AxiosResponse<any>;
@@ -123,40 +144,26 @@ async function processAkasaFile(buffer: Buffer) {
             const Destination = journeys[0].designator.destination;
             const Origin = journeys[0].designator.origin;
             const depDate = journeys[0].designator.departure.slice(0, 10);
+
             const arrTime = checkTimeFormat(
               journeys[0].designator.arrival.slice(11, 16)
             );
             const depTime = checkTimeFormat(
               journeys[0].designator.departure.slice(11, 16)
             );
+
             const PAX = Object.keys(bookingData.breakdown.passengers).length;
             const flightReference = journeys[0].segments[0].flightReference;
             const qpCodeRegex = /QP(\d+)/;
             const match = flightReference.match(qpCodeRegex);
             const flightNumber = match ? match[1] : null;
 
-            // Comparison Logic
-            const OldPur = JSON.stringify(record.Pur);
+            // --- COMPARISON LOGIC (RESTORED) ---
+            const OldPur = JSON.stringify(record.Pur); // e.g. "1" or "2"
 
-            // Time Logic (Timezone handling)
-            const DepinputTime = record.Dep;
-            const date = moment.utc(DepinputTime).tz("Asia/Kolkata");
-            const minute = date.minutes();
-            const lastDigit = minute % 10;
-            const roundedMinutes =
-              lastDigit === 0 || lastDigit === 5 ? minute : minute + 1;
-            date.minutes(roundedMinutes);
-            const OldDep = date.format("HH:mm A");
-
-            const ArrinputTime = record.Arr;
-            const dateb = moment.utc(ArrinputTime).tz("Asia/Kolkata");
-            const minuteb = dateb.minutes();
-            const lastDigitb = minuteb % 10;
-            const roundedMinutesb =
-              lastDigitb === 0 || lastDigitb === 5 ? minuteb : minuteb + 1;
-            dateb.minutes(roundedMinutesb);
-            const OldArr = dateb.format("HH:mm A");
-
+            // Apply the rounding/timezone logic to Excel Inputs
+            const OldDep = formatExcelTime(record.Dep);
+            const OldArr = formatExcelTime(record.Arr);
             const OldDate = moment(record.TravelDate).format("YYYY-MM-DD");
 
             const CheckStatus = () => {
@@ -164,7 +171,7 @@ async function processAkasaFile(buffer: Buffer) {
                 record.Flight != flightNumber ||
                 OldPur != JSON.stringify(PAX) ||
                 OldDate != depDate ||
-                OldDep != depTime ||
+                OldDep != depTime || // Comparing formatted times
                 OldArr != arrTime
               ) {
                 return "BAD";
@@ -174,12 +181,10 @@ async function processAkasaFile(buffer: Buffer) {
             };
 
             const MyRemarks = CheckStatus();
+            // result format: PNR|Origin|Dest|InputFlight|ApiFlight|InputPax|ApiPax|InputDate|ApiDate|InputDep|ApiDep|InputArr|ApiArr|Status
             const resultString = `${PNR}|${Origin}|${Destination}|${record.Flight}|${flightNumber}|${OldPur}|${PAX}|${OldDate}|${depDate}|${OldDep}|${depTime}|${OldArr}|${arrTime}|${MyRemarks}`;
 
-            return {
-              pnr: PNR,
-              data: resultString,
-            };
+            return { pnr: PNR, data: resultString };
           } else {
             return {
               pnr: bookingData.recordLocator,
@@ -218,23 +223,17 @@ async function fetchSpiceJetToken(
 ): Promise<AxiosResponse<any>> {
   return axios(SpiceJetTokenConfig)
     .then((response) => {
-      // Handle varied token structure if necessary
       const token =
         response.data?.data?.token || response.data?.data?.data?.token;
-      if (token && token.length > 0) {
-        return response;
-      } else if (currentAttempt < maxAttempts) {
+      if (token && token.length > 0) return response;
+      if (currentAttempt < maxAttempts)
         return fetchSpiceJetToken(maxAttempts, currentAttempt + 1);
-      } else {
-        throw new Error("Maximum number of attempts reached for SpiceJet");
-      }
+      throw new Error("Maximum number of attempts reached for SpiceJet");
     })
     .catch((error) => {
-      if (currentAttempt < maxAttempts) {
+      if (currentAttempt < maxAttempts)
         return fetchSpiceJetToken(maxAttempts, currentAttempt + 1);
-      } else {
-        throw new Error("Maximum number of attempts reached");
-      }
+      throw new Error("Maximum number of attempts reached");
     });
 }
 
@@ -242,7 +241,6 @@ async function processSpiceJetFile(buffer: Buffer) {
   const data = await fetchSpiceJetToken(10);
   const myToken = data?.data?.data?.token || data?.data?.token;
 
-  // Read Excel
   const wb = XLSX.read(buffer, { type: "buffer", cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
   const jsonSheet: any[] = XLSX.utils.sheet_to_json(ws);
@@ -260,7 +258,6 @@ async function processSpiceJetFile(buffer: Buffer) {
 
       let bookingData: any = null;
 
-      // Try multiple emails
       for (const email of emailAddresses) {
         try {
           const config = {
@@ -273,19 +270,14 @@ async function processSpiceJetFile(buffer: Buffer) {
           };
           const response = await axios(config);
           bookingData = response.data.data || response.data.bookingData;
-
-          if (bookingData?.journeys || bookingData?.recordLocator) {
-            break; // Found data
-          }
+          if (bookingData?.journeys || bookingData?.recordLocator) break;
         } catch (error: any) {
           if (error.response?.status === 404) continue;
-          // Don't throw immediately, try next email
         }
       }
 
-      if (!bookingData) {
+      if (!bookingData)
         return { pnr: PNR, error: `All attempts failed for ${PNR}` };
-      }
 
       try {
         const journeys = bookingData.journeys;
@@ -304,31 +296,13 @@ async function processSpiceJetFile(buffer: Buffer) {
           const arrTime = checkTimeFormat(arrDetails[1].substring(0, 5));
 
           const PAX = Object.keys(bookingData.passengers).length;
+
+          // --- COMPARISON LOGIC (RESTORED) ---
           const OldPur = JSON.stringify(record.Pur);
 
-          // Time Comparison Logic
-          const DepinputTime = record.Dep;
-          const depMoment = moment.utc(DepinputTime).tz("Asia/Kolkata");
-          const depMin = depMoment.minutes();
-          const depRoundedMin =
-            depMin % 10 === 0 || depMin % 10 === 5 ? depMin : depMin + 1; // Logic derived from your code (though +1 logic usually for rounding, kept as is)
-          // Actually, your logic says: if last digit is 0 or 5, keep it. Else minute + 1.
-          // Careful: minute+1 on 59 becomes 60 which moment handles.
-
-          // Re-implementing exact logic from snippet:
-          let finalDepMin = depMin;
-          if (depMin % 10 !== 0 && depMin % 10 !== 5) finalDepMin = depMin + 1;
-          depMoment.minutes(finalDepMin);
-          const OldDep = depMoment.format("HH:mm A");
-
-          const ArrinputTime = record.Arr;
-          const arrMoment = moment.utc(ArrinputTime).tz("Asia/Kolkata");
-          const arrMin = arrMoment.minutes();
-          let finalArrMin = arrMin;
-          if (arrMin % 10 !== 0 && arrMin % 10 !== 5) finalArrMin = arrMin + 1;
-          arrMoment.minutes(finalArrMin);
-          const OldArr = arrMoment.format("HH:mm A");
-
+          // Apply same helper to SpiceJet excel inputs
+          const OldDep = formatExcelTime(record.Dep);
+          const OldArr = formatExcelTime(record.Arr);
           const OldDate = moment(record.TravelDate).format("YYYY-MM-DD");
 
           const CheckStatus = () => {
@@ -369,18 +343,15 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData();
     const file = formData.get("file") as File;
-    const airline = formData.get("airline") as string; // Expect 'akasa' or 'spicejet'
+    const airline = formData.get("airline") as string;
 
-    if (!file) {
+    if (!file)
       return NextResponse.json({ error: "No file uploaded" }, { status: 400 });
-    }
 
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
     let rawResults: any[] = [];
-
-    // Select Airline Logic
     const airlineKey = airline ? airline.toLowerCase().trim() : "";
 
     if (airlineKey.includes("akasa") || airlineKey === "qp") {
@@ -388,21 +359,14 @@ export async function POST(req: NextRequest) {
     } else if (airlineKey.includes("spice") || airlineKey === "sg") {
       rawResults = await processSpiceJetFile(buffer);
     } else {
-      return NextResponse.json(
-        { error: "Unknown airline. Please specify 'akasa' or 'spicejet'." },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Unknown airline." }, { status: 400 });
     }
 
-    // Format results for response
     const formatted = rawResults.reduce(
       (acc, item) => {
         if (!item) return acc;
-        if (item.error) {
-          acc.errors.push(item.error);
-        } else if (item.data) {
-          acc.results.push(item.data);
-        }
+        if (item.error) acc.errors.push(item.error);
+        else if (item.data) acc.results.push(item.data);
         return acc;
       },
       { results: [] as string[], errors: [] as string[] }

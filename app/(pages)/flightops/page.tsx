@@ -267,8 +267,10 @@ export default function FlightOpsPage() {
       </Card>
 
       {/* RIGHT: Status Feed */}
-      <Card className="w-full xl:flex-1 border-0 shadow-2xl bg-white ring-1 ring-slate-900/5 flex flex-col min-h-137.5 max-h-200">
-        <CardHeader className="border-b border-slate-100 bg-slate-50/50 py-4">
+      {/* RIGHT: Status Feed */}
+      {/* FIXED: Uses fixed responsive height (h-[600px] xl:h-[800px]) instead of min/max to ensure scroll area works */}
+      <Card className="w-full xl:flex-1 border-0 shadow-2xl bg-white ring-1 ring-slate-900/5 flex flex-col h-[600px] xl:h-[800px]">
+        <CardHeader className="border-b border-slate-100 bg-slate-50/50 py-4 shrink-0">
           <div className="flex justify-between items-center">
             <div className="flex items-center gap-2">
               <div className="p-2 bg-slate-200 rounded-md text-slate-700">
@@ -309,8 +311,10 @@ export default function FlightOpsPage() {
           </div>
         </CardHeader>
 
-        <CardContent className="p-0 grow relative bg-slate-50/30">
-          <ScrollArea className="h-125 xl:h-full w-full p-4">
+        {/* FIXED: Added flex-1, min-h-0, and overflow-hidden to constrain children */}
+        <CardContent className="p-0 flex-1 min-h-0 relative bg-slate-50/30 overflow-hidden">
+          {/* FIXED: ScrollArea set to h-full to fill the constrained flex parent */}
+          <ScrollArea className="h-full w-full p-4">
             {/* Empty State */}
             {flightData.length === 0 && !errors && !isLoading && (
               <div className="h-full flex flex-col items-center justify-center text-slate-400 space-y-3 mt-20">
