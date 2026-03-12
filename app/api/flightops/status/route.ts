@@ -18,37 +18,115 @@ import {
 const checkTimeFormat = (text: string): string => {
   if (!text) return "";
 
-  // Split time into hours and minutes
-  const parts = text.split(":");
-  let hour = parseInt(parts[0]);
-  const minute = parts[1];
+  const cleanText = String(text).trim();
 
-  // Determine AM or PM
-  const suffix = hour >= 12 ? "PM" : "AM";
+  // Try parsing with moment first (handles both 12h AM/PM and 24h)
+  const parsed = moment(cleanText, ["HH:mm", "hh:mm A", "h:mm A", "HH:mm:ss", "hh:mma", "h:mma"]);
+  if (parsed.isValid()) {
+    return parsed.format("HH:mm");
+  }
 
-  // Convert 24h to 12h
-  hour = hour % 12;
-  hour = hour ? hour : 12; // the hour '0' should be '12'
+  // Manual fallback for weird edge cases
+  const parts = cleanText.split(":");
+  if (parts.length < 2) return cleanText;
 
-  // Pad with leading zero if needed (e.g., 2 -> 02)
-  const paddedHour = hour < 10 ? "0" + hour : hour;
+  let hour = parseInt(parts[0], 10) || 0;
+  const minuteStr = parts[1].replace(/[^0-9]/g, '');
+  const minute = parseInt(minuteStr, 10) || 0;
 
-  return `${paddedHour}:${minute} ${suffix}`;
+  const isPM = cleanText.toLowerCase().includes("pm");
+  const isAM = cleanText.toLowerCase().includes("am");
+
+  if (isPM && hour < 12) hour += 12;
+  if (isAM && hour === 12) hour = 0;
+
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 };
 
-// HELPER: Format Time from Excel Input (The key fix)
+// HELPER: Format Time from Excel Input
 const formatExcelTime = (inputTime: any) => {
-  const date = moment(inputTime);
+  if (inputTime === null || inputTime === undefined || inputTime === "") return "";
+
+  let date;
+
+  // Case 1: Excel parses time as a fraction of a 24-hour day (e.g. 0.5 = 12:00 PM)
+  if (typeof inputTime === "number") {
+    const totalMinutes = Math.round(inputTime * 24 * 60);
+    const hours = Math.floor(totalMinutes / 60) % 24;
+    const mins = totalMinutes % 60;
+    date = moment.utc().hours(hours).minutes(mins).seconds(0);
+  }
+  // Case 2: Input is already a string ("14:30", "02:30 PM")
+  else if (typeof inputTime === "string") {
+    return checkTimeFormat(inputTime);
+  }
+  // Case 3: JS Date object from XLSX with cellDates: true
+  else if (inputTime instanceof Date) {
+    date = moment.utc(inputTime);
+  }
+  // Fallback
+  else {
+    date = moment.utc(inputTime);
+  }
+
+  if (!date || !date.isValid()) {
+    return "";
+  }
 
   // Rounding Logic
   const minute = date.minutes();
   const lastDigit = minute % 10;
   const roundedMinutes =
-    lastDigit === 0 || lastDigit === 5 ? minute : minute + 1;
+      lastDigit === 0 || lastDigit === 5 ? minute : minute + 1;
+
   date.minutes(roundedMinutes);
 
-  // FIX: Change 'HH' to 'hh' for 12-hour format
-  return date.format("hh:mm A");
+  return date.format("HH:mm");
+};
+
+// HELPER: Format Date from Excel Input
+const formatExcelDate = (inputDate: any) => {
+  if (!inputDate) return "";
+
+  // 1. Strings (e.g., "2026-03-22")
+  if (typeof inputDate === "string") {
+    const match = inputDate.match(/\d{4}-\d{2}-\d{2}/);
+    if (match) return match[0]; // Safely grab YYYY-MM-DD directly
+
+    const parsed = moment(inputDate);
+    return parsed.isValid() ? parsed.format("YYYY-MM-DD") : String(inputDate);
+  }
+
+  // 2. Excel Raw Numbers
+  if (typeof inputDate === "number") {
+    const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+    const date = new Date(excelEpoch.getTime() + inputDate * 86400000);
+    return moment.utc(date).format("YYYY-MM-DD");
+  }
+
+  // 3. JS Date Objects (The cause of the bug)
+  if (inputDate instanceof Date) {
+    // Generate both possible representations
+    const localDateStr = moment(inputDate).format("YYYY-MM-DD");
+    const utcDateStr = moment.utc(inputDate).format("YYYY-MM-DD");
+
+    // If it was parsed by the CSV reader at Local Midnight (e.g., IST 00:00),
+    // it belongs to the local day string.
+    if (inputDate.getHours() === 0) {
+      return localDateStr;
+    }
+
+    // If it was parsed by an Excel reader at UTC Midnight (e.g., UTC 00:00),
+    // it belongs to the UTC day string.
+    if (inputDate.getUTCHours() === 0) {
+      return utcDateStr;
+    }
+
+    // Fallback: Safely push negative timezones into the middle of the correct day
+    return moment.utc(inputDate).add(12, 'hours').format("YYYY-MM-DD");
+  }
+
+  return String(inputDate);
 };
 
 // ==========================================
@@ -164,7 +242,7 @@ async function processAkasaFile(buffer: Buffer) {
             // Apply the rounding/timezone logic to Excel Inputs
             const OldDep = formatExcelTime(record.Dep);
             const OldArr = formatExcelTime(record.Arr);
-            const OldDate = moment(record.TravelDate).format("YYYY-MM-DD");
+            const OldDate = formatExcelDate(record.TravelDate);
 
             const CheckStatus = () => {
               if (
@@ -289,7 +367,7 @@ async function processSpiceJetFile(buffer: Buffer) {
           const arrSector = designator.destination;
 
           const depDetails = designator.departure.split("T");
-          const depDate = depDetails[0];
+          const depDate = formatExcelDate(depDetails[0]);
           const depTime = checkTimeFormat(depDetails[1].substring(0, 5));
 
           const arrDetails = designator.arrival.split("T");
@@ -303,8 +381,7 @@ async function processSpiceJetFile(buffer: Buffer) {
           // Apply same helper to SpiceJet excel inputs
           const OldDep = formatExcelTime(record.Dep);
           const OldArr = formatExcelTime(record.Arr);
-          const OldDate = moment(record.TravelDate).format("YYYY-MM-DD");
-
+          const OldDate = formatExcelDate(record.TravelDate);
           const CheckStatus = () => {
             if (
               record.Flight != flightNumber ||
