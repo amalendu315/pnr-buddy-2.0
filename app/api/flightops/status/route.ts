@@ -20,10 +20,18 @@ const checkTimeFormat = (text: string): string => {
 
   const cleanText = String(text).trim();
 
-  // Try parsing with moment first (handles both 12h AM/PM and 24h)
-  const parsed = moment(cleanText, ["HH:mm", "hh:mm A", "h:mm A", "HH:mm:ss", "hh:mma", "h:mma"]);
+  // Try parsing with moment first
+  const parsed = moment(cleanText, [
+    "HH:mm",
+    "hh:mm A",
+    "h:mm A",
+    "HH:mm:ss",
+    "hh:mma",
+    "h:mma",
+  ]);
   if (parsed.isValid()) {
-    return parsed.format("HH:mm");
+    // 'HH' gives 24-hour format (00-23), 'A' appends the AM/PM tag
+    return parsed.format("HH:mm A");
   }
 
   // Manual fallback for weird edge cases
@@ -31,16 +39,21 @@ const checkTimeFormat = (text: string): string => {
   if (parts.length < 2) return cleanText;
 
   let hour = parseInt(parts[0], 10) || 0;
-  const minuteStr = parts[1].replace(/[^0-9]/g, '');
+  const minuteStr = parts[1].replace(/[^0-9]/g, "");
   const minute = parseInt(minuteStr, 10) || 0;
 
   const isPM = cleanText.toLowerCase().includes("pm");
   const isAM = cleanText.toLowerCase().includes("am");
 
+  // Standardize to 24-hour format
   if (isPM && hour < 12) hour += 12;
   if (isAM && hour === 12) hour = 0;
 
-  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+  // Determine AM/PM based on the 24-hour time
+  const ampm = hour >= 12 ? "PM" : "AM";
+
+  // Return the exact 24-hour hour, minutes, and the AM/PM tag
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}${ampm}`;
 };
 
 // HELPER: Format Time from Excel Input
