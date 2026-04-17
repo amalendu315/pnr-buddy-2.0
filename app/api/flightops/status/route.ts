@@ -90,11 +90,10 @@ const formatExcelTime = (inputTime: any) => {
   const minute = date.minutes();
   const lastDigit = minute % 10;
   const roundedMinutes =
-      lastDigit === 0 || lastDigit === 5 ? minute : minute + 1;
+    lastDigit === 0 || lastDigit === 5 ? minute : minute + 1;
 
   date.minutes(roundedMinutes);
-
-  return date.format("HH:mm");
+ return date.format("HH:mm A");
 };
 
 // HELPER: Format Date from Excel Input
