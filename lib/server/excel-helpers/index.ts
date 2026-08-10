@@ -788,6 +788,50 @@ export function transformData(
 
         return orderedRecord;
       });
+     case "sa.xlsx":
+      return jsonData.map((record: ExcelRecord, index: number) => {
+        let title = record["Title"] || "";
+        const dot = title.indexOf(".");
+        if (dot > 0) {
+          title = title.replace(".", "");
+        }
+        if (title === "Miss") title = "Ms";
+        if (title === "Mstr") title = "Mr";
+
+        return {
+          "SL NO.": record["SL"] || index + 1,
+          TITLE: title,
+          "LAST NAME": record["Last Name"] || "",
+          "FIRST NAME": record["First Name"] || "",
+          "DATE OF BIRTH": " ",
+          PNR: " ",
+        };
+      });
+    case "rx.xlsx":
+      return jsonData.map((record: ExcelRecord, index: number) => {
+        let title = record["Title"] || "";
+        const dot = title.indexOf(".");
+        if (dot > 0) {
+          title = title.replace(".", "");
+        }
+        if (title === "Miss") title = "Ms";
+        if (title === "Mstr") title = "Mr";
+
+        return {
+          "S.NO": record["SL"] || index + 1,
+          "FROM-TO": " ",
+          "TRAVEL DATE": " ",
+          "ORDER ID/PNR": " ",
+          TITLE: title,
+          "GIVEN NAME": record["First Name"] || "",
+          "FAMILY NAME": record["Last Name"] || "",
+          "DATE OF BIRTH": " ",
+          "PASSPORT ISSUING COUNTRY": "INDIA",
+          "PASSPORT NO.": record["PASSPORT NO"] || " ",
+          "PASSPORT EXPIRY DATE": record["EXPIRY DATE(DD/MM/YYYY)"] || " ",
+          "MEAL REQUEST": " ",
+        };
+      });
     default:
       throw new Error(`Unsupported airline code: ${airlineCode}`);
   }
