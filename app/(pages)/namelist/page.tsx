@@ -34,8 +34,9 @@ const fileCodeInfo = {
   "f.xlsx": "Air India International",
   "h.xlsx": "Air India Express International",
   "l.xlsx": "Air Arabia",
+  "sa.xlsx": "Salam Air",
+  "rx.xlsx": "Riyadh Air",
 };
-
 export default function NamelistPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
