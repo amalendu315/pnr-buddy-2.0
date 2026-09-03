@@ -296,26 +296,53 @@ async function processAkasaFile(buffer: Buffer) {
 const SpiceJetTokenConfig = {
   method: "post",
   url: spicejetTokenUrl,
-  headers: { "Content-Type": "application/json" },
+  headers: {
+    "Content-Type": "application/json",
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+
+    // 2. Tell them you expect standard web data
+    Accept: "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+
+    // 3. Spoof the Origin and Referer (CRITICAL for airline APIs)
+    Origin: "https://www.spicejet.com",
+    Referer: "https://www.spicejet.com/",
+
+    // 4. Mimic modern browser security headers
+    "Sec-Ch-Ua":
+      '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "empty",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Site": "same-origin",
+  },
 };
 
 async function fetchSpiceJetToken(
   maxAttempts: number,
-  currentAttempt = 1
+  currentAttempt = 1,
 ): Promise<AxiosResponse<any>> {
+  // ... Copy existing body ...
   return axios(SpiceJetTokenConfig)
     .then((response) => {
       const token =
         response.data?.data?.token || response.data?.data?.data?.token;
-      if (token && token.length > 0) return response;
-      if (currentAttempt < maxAttempts)
+      if (token && token.length > 0) {
+        return response;
+      } else if (currentAttempt < maxAttempts) {
         return fetchSpiceJetToken(maxAttempts, currentAttempt + 1);
-      throw new Error("Maximum number of attempts reached for SpiceJet");
+      } else {
+        throw new Error("Maximum number of attempts reached for SpiceJet");
+      }
     })
     .catch((error) => {
-      if (currentAttempt < maxAttempts)
+      if (currentAttempt < maxAttempts) {
         return fetchSpiceJetToken(maxAttempts, currentAttempt + 1);
-      throw new Error("Maximum number of attempts reached");
+      } else {
+        throw new Error("Maximum attempts reached for SpiceJet Token");
+      }
     });
 }
 
@@ -346,8 +373,23 @@ async function processSpiceJetFile(buffer: Buffer) {
             method: "post",
             url: `${spicejetPnrRetrieveUrl}?recordLocator=${PNR}&emailAddress=${email}`,
             headers: {
-              Authorization: myToken,
+              Authorization: `Bearer ${myToken}`,
               "Content-Type": "application/json",
+
+              // 3. Re-apply the WAF bypass headers from your Token Config
+              "User-Agent":
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              Accept: "application/json, text/plain, */*",
+              "Accept-Language": "en-US,en;q=0.9",
+              Origin: "https://www.spicejet.com",
+              Referer: "https://www.spicejet.com/",
+              "Sec-Ch-Ua":
+                '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+              "Sec-Ch-Ua-Mobile": "?0",
+              "Sec-Ch-Ua-Platform": '"Windows"',
+              "Sec-Fetch-Dest": "empty",
+              "Sec-Fetch-Mode": "cors",
+              "Sec-Fetch-Site": "same-origin",
             },
           };
           const response = await axios(config);

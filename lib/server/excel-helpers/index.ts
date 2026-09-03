@@ -360,7 +360,7 @@ export function transformData(
         if (!record["DOB (DD/MM/YYYY)"]) {
           record["DOB (DD/MM/YYYY)"] = " ";
           console.warn(
-            "Warning: 'DOB (DD/MM/YYYY)' property not found in record."
+            "Warning: 'DOB (DD/MM/YYYY)' property not found in record.",
           );
         }
 
@@ -553,7 +553,7 @@ export function transformData(
         if (!record["DOB (DD/MM/YYYY)"]) {
           record["DOB (DD/MM/YYYY)"] = " ";
           console.warn(
-            "Warning: 'DOB (DD/MM/YYYY)' property not found in record."
+            "Warning: 'DOB (DD/MM/YYYY)' property not found in record.",
           );
         }
 
@@ -622,7 +622,7 @@ export function transformData(
         if (!record["DOB (DD/MM/YYYY)"]) {
           record["DOB (DD/MM/YYYY)"] = " ";
           console.warn(
-            "Warning: 'DOB (DD/MM/YYYY)' property not found in record."
+            "Warning: 'DOB (DD/MM/YYYY)' property not found in record.",
           );
         }
 
@@ -686,7 +686,7 @@ export function transformData(
         if (!record["DOB (DD/MM/YYYY)"]) {
           record["DOB (DD/MM/YYYY)"] = " ";
           console.warn(
-            "Warning: 'DOB (DD/MM/YYYY)' property not found in record."
+            "Warning: 'DOB (DD/MM/YYYY)' property not found in record.",
           );
         }
 
@@ -758,7 +758,7 @@ export function transformData(
         if (!record["DOB (DD/MM/YYYY)"]) {
           record["DOB (DD/MM/YYYY)"] = " ";
           console.warn(
-            "Warning: 'DOB (DD/MM/YYYY)' property not found in record."
+            "Warning: 'DOB (DD/MM/YYYY)' property not found in record.",
           );
         }
 
@@ -788,7 +788,7 @@ export function transformData(
 
         return orderedRecord;
       });
-     case "sa.xlsx":
+    case "sa.xlsx":
       return jsonData.map((record: ExcelRecord, index: number) => {
         let title = record["Title"] || "";
         const dot = title.indexOf(".");
