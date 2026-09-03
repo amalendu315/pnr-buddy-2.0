@@ -140,6 +140,7 @@
 // };
 import fs from "fs/promises";
 import path from "path";
+import os from "os"; // <--- Add this line
 import * as XLSX from "xlsx";
 
 type CellValue = string | number | boolean | Date | null | undefined;
@@ -154,7 +155,7 @@ interface Destination {
 }
 
 const destinationUrl = "https://shivent.azurewebsites.net/fdestination-list";
-const cachePath = path.join(process.cwd(), "data", "destination-list.xlsx");
+const cachePath = path.join(os.tmpdir(), "destination-list.xlsx");
 
 // Helpers for string comparisons
 const normalize = (value: CellValue) =>
