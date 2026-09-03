@@ -30,6 +30,9 @@ export default function Home() {
       case "option3":
         router.push("/flightops");
         break;
+      case "option4":
+        router.push("/airline-format");
+        break;
       default:
         break;
     }
@@ -60,6 +63,9 @@ export default function Home() {
               <SelectItem value="option2">PNR Purchase Data !</SelectItem>
               <SelectItem value="option3">
                 Flight Operations "GOOD/BAD" !
+              </SelectItem>
+              <SelectItem value="option4">
+                GOOD BAD Format !
               </SelectItem>
             </SelectContent>
           </Select>

@@ -259,7 +259,7 @@ export default function AirlineFormatPage() {
             </div>
             <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">
               Airline Format{" "}
-              <span className="text-transparent bg-clip-text bg-gradient-to-r from-teal-400 to-emerald-300">
+              <span className="text-transparent bg-clip-text bg-linear-to-r from-teal-400 to-emerald-300">
                 Pro
               </span>
             </h1>
@@ -365,7 +365,7 @@ export default function AirlineFormatPage() {
 
               {/* Conditional Email Field */}
               <div
-                className={`transition-all duration-300 ease-in-out ${airline === "spicejet" ? "opacity-100 h-[72px]" : "opacity-0 h-0 overflow-hidden m-0"}`}
+                className={`transition-all duration-300 ease-in-out ${airline === "spicejet" ? "opacity-100 h-18" : "opacity-0 h-0 overflow-hidden m-0"}`}
               >
                 <div className="space-y-2">
                   <label
@@ -395,7 +395,7 @@ export default function AirlineFormatPage() {
                 </label>
                 <label
                   htmlFor="workbook"
-                  className={`group relative flex flex-col items-center justify-center w-full min-h-[140px] cursor-pointer rounded-xl border-2 border-dashed transition-all duration-200 ${
+                  className={`group relative flex flex-col items-center justify-center w-full min-h-35 cursor-pointer rounded-xl border-2 border-dashed transition-all duration-200 ${
                     file
                       ? "border-teal-500 bg-teal-50/50"
                       : "border-slate-300 bg-slate-50 hover:border-teal-400 hover:bg-slate-100/50"
