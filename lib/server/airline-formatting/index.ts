@@ -311,7 +311,7 @@ const formatRow = (
   if (flightParts.length === 2) {
     flightRoute = "1 Stop";
   } else if (flightParts.length > 2) {
-    flightRoute = `${flightParts.length - 1} Stops`;
+    flightRoute = `${flightParts.length - 1} - Stops`;
   }
 
   // Strictly define output shape to discard old keys
