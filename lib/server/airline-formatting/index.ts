@@ -320,10 +320,14 @@ const formatTime = (val: CellValue) => {
   if (!val) return "";
 
   if (val instanceof Date) {
-    // When cellDates: true parses Excel time, the time components are stored
-    // inside the UTC methods (getUTCHours, getUTCMinutes) to avoid local offset shifts.
-    const h = String(val.getUTCHours()).padStart(2, "0");
-    const m = String(val.getUTCMinutes()).padStart(2, "0");
+    // 1. FIX EXCEL FLOATING POINT: Round to the nearest minute
+    // This prevents 12:00:00 from being evaluated as 11:59:59.999
+    const roundedDate = new Date(Math.round(val.getTime() / 60000) * 60000);
+
+    // 2. FIX VERCEL TIMEZONE: Extract components using UTC methods
+    // This ignores the server's local timezone offset completely
+    const h = String(roundedDate.getUTCHours()).padStart(2, "0");
+    const m = String(roundedDate.getUTCMinutes()).padStart(2, "0");
 
     const hourNum = parseInt(h, 10);
     const ampm = hourNum >= 12 ? "PM" : "AM";
