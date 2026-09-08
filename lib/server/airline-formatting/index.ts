@@ -305,18 +305,60 @@ const formatDate = (val: CellValue) => {
   return match ? match[1] : str;
 };
 
+// const formatTime = (val: CellValue) => {
+//   if (!val) return "";
+//   if (val instanceof Date) {
+//     const h = String(val.getUTCHours()).padStart(2, "0");
+//     const m = String(val.getUTCMinutes()).padStart(2, "0");
+//     return `${h}:${m}`;
+//   }
+//   const str = String(val).trim();
+//   const match = str.match(/(\d{2}:\d{2})/);
+//   return match ? match[1] : str;
+// };
 const formatTime = (val: CellValue) => {
   if (!val) return "";
-  if (val instanceof Date) {
-    const h = String(val.getUTCHours()).padStart(2, "0");
-    const m = String(val.getUTCMinutes()).padStart(2, "0");
-    return `${h}:${m}`;
-  }
-  const str = String(val).trim();
-  const match = str.match(/(\d{2}:\d{2})/);
-  return match ? match[1] : str;
-};
 
+  if (val instanceof Date) {
+    // FIX: Round to the nearest minute to handle Excel's floating-point precision loss
+    // (This prevents 18:05:00 from being parsed as 18:04:59 and truncating to 18:04)
+    const roundedDate = new Date(Math.round(val.getTime() / 60000) * 60000);
+
+    // Convert to IST explicitly
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23", // Forces 24-hour numerical format (00-23)
+    });
+
+    const timeString = formatter.format(roundedDate);
+    const [h, m] = timeString.split(":");
+
+    // Calculate the AM/PM tag for the 24-hour string
+    const hourNum = parseInt(h, 10);
+    const ampm = hourNum >= 12 ? "PM" : "AM";
+
+    return `${h}:${m} ${ampm}`;
+  }
+
+  // Fallback for string values
+  const str = String(val).trim();
+  const match = str.match(/(\d{2}):(\d{2})/);
+
+  if (match) {
+    const hourNum = parseInt(match[1], 10);
+    const ampm = hourNum >= 12 ? "PM" : "AM";
+
+    // Prevent duplicating the tag if the string already has one
+    if (/am|pm/i.test(str)) {
+      return str;
+    }
+    return `${match[1]}:${match[2]} ${ampm}`;
+  }
+
+  return str;
+};
 const isToday = (date: Date) => {
   const now = new Date();
   return (
