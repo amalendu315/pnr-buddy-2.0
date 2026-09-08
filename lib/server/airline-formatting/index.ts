@@ -320,22 +320,11 @@ const formatTime = (val: CellValue) => {
   if (!val) return "";
 
   if (val instanceof Date) {
-    // FIX: Round to the nearest minute to handle Excel's floating-point precision loss
-    // (This prevents 18:05:00 from being parsed as 18:04:59 and truncating to 18:04)
-    const roundedDate = new Date(Math.round(val.getTime() / 60000) * 60000);
+    // When cellDates: true parses Excel time, the time components are stored
+    // inside the UTC methods (getUTCHours, getUTCMinutes) to avoid local offset shifts.
+    const h = String(val.getUTCHours()).padStart(2, "0");
+    const m = String(val.getUTCMinutes()).padStart(2, "0");
 
-    // Convert to IST explicitly
-    const formatter = new Intl.DateTimeFormat("en-US", {
-      timeZone: "Asia/Kolkata",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23", // Forces 24-hour numerical format (00-23)
-    });
-
-    const timeString = formatter.format(roundedDate);
-    const [h, m] = timeString.split(":");
-
-    // Calculate the AM/PM tag for the 24-hour string
     const hourNum = parseInt(h, 10);
     const ampm = hourNum >= 12 ? "PM" : "AM";
 
@@ -350,7 +339,6 @@ const formatTime = (val: CellValue) => {
     const hourNum = parseInt(match[1], 10);
     const ampm = hourNum >= 12 ? "PM" : "AM";
 
-    // Prevent duplicating the tag if the string already has one
     if (/am|pm/i.test(str)) {
       return str;
     }
@@ -359,6 +347,7 @@ const formatTime = (val: CellValue) => {
 
   return str;
 };
+
 const isToday = (date: Date) => {
   const now = new Date();
   return (
