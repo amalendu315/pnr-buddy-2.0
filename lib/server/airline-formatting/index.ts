@@ -112,7 +112,7 @@
 //   email: string,
 //   destinations: Destination[],
 // ) => {
-//   // Dynamically find columns
+//   // Dynamically find columns in case of typos in the input file (e.g. "Desstination" -> "Destination")
 //   const destKey =
 //     Object.keys(row).find((k) => /dest.*tion|sector/i.test(k)) ||
 //     "Desstination";
@@ -127,6 +127,7 @@
 //   let fromCode = "";
 //   let toCode = "";
 
+//   // Attempt 1: Look for exact match from the 'FDestName' API property
 //   const normalizedDest = normalize(rawDest);
 //   const exactMatch = destinations.find(
 //     (d) => normalize(d.FDestName) === normalizedDest,
@@ -136,6 +137,7 @@
 //     fromCode = exactMatch.FromCode;
 //     toCode = exactMatch.ToCode;
 //   } else {
+//     // Attempt 2: Split "Dubai // Delhi" and attempt independent lookups
 //     const parts = rawDest.split(/\s*(?:\/\/|-)\s*/);
 //     const rawFrom = parts[0] || "";
 //     const rawTo = parts[1] || "";
@@ -198,40 +200,59 @@
 //   if (!worksheet) throw new Error("The uploaded workbook has no worksheet");
 
 //   // --- DYNAMIC HEADER DETECTION LOGIC ---
-//   // Read the sheet as a raw 2D array of rows and columns
 //   const rawData = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
 
 //   let headerRowIndex = 0;
 
-//   // Scan down the rows to find the actual table header
 //   for (let i = 0; i < rawData.length; i++) {
 //     if (!Array.isArray(rawData[i])) continue;
 
-//     // Combine the text of all cells in this row to search it
 //     const rowStr = rawData[i]
 //       .map((cell) => String(cell || "").toLowerCase())
 //       .join(" ");
 
-//     // Check if this row looks like a flight manifest header
 //     if (
 //       rowStr.includes("pnr") &&
 //       (rowStr.includes("flight") ||
 //         rowStr.includes("dest") ||
 //         rowStr.includes("sector"))
 //     ) {
-//       headerRowIndex = i; // Found it! Set this index as the header.
+//       headerRowIndex = i;
 //       break;
 //     }
 //   }
 
-//   // Parse the rows into objects, instructing the xlsx library to use the dynamically found header row
+//   // Instruct xlsx to parse object rows beginning specifically at the header index
 //   const rows = XLSX.utils.sheet_to_json<ExcelRow>(worksheet, {
 //     range: headerRowIndex,
 //     defval: "",
 //   });
-//   // --------------------------------------
 
-//   const formattedRows = rows.map((row) =>
+//   // --- FILTER OUT JUNK / TOTAL ROWS ---
+//   const validRows = rows.filter((row) => {
+//     // 1. Check if the row contains "Total" or "Total:" anywhere
+//     const isTotalRow = Object.values(row).some((val) => {
+//       const cleaned = String(val).toLowerCase().replace(/\s+/g, "");
+//       return cleaned === "total:" || cleaned === "total" || cleaned.includes("total:");
+//     });
+
+//     // 2. Also ensure the row actually has data (like a PNR or Destination)
+//     // This stops it from formatting fully blank rows at the very bottom
+//     const pnrKey = Object.keys(row).find((k) => /pnr/i.test(k)) || "PNR";
+//     const destKey =
+//       Object.keys(row).find((k) => /dest.*tion|sector/i.test(k)) ||
+//       "Desstination";
+
+//     const hasData =
+//       String(row[pnrKey] || "").trim() !== "" ||
+//       String(row[destKey] || "").trim() !== "";
+
+//     return !isTotalRow && hasData; // Keep row ONLY if it is not a total row AND contains valid data
+//   });
+//   // ------------------------------------
+
+//   // Map over only the valid rows
+//   const formattedRows = validRows.map((row) =>
 //     formatRow(row, airline, email, destinations),
 //   );
 
@@ -244,7 +265,7 @@
 // };
 import fs from "fs/promises";
 import path from "path";
-import os from "os"; 
+import os from "os";
 import * as XLSX from "xlsx";
 
 type CellValue = string | number | boolean | Date | null | undefined;
@@ -328,10 +349,9 @@ export const getDailyDestinations = async (): Promise<Destination[]> => {
     const stats = await fs.stat(cachePath);
     if (isToday(stats.mtime)) return readCachedDestinations();
   } catch {
-    // Expected on the very first run if the file does not exist
+    // Expected on the very first run
   }
 
-  // Fallback to "My Bearer Token" if env var is missing
   const token = process.env.DESTINATION_API_TOKEN || "My Bearer Token";
   const response = await fetch(destinationUrl, {
     headers: { Authorization: `Bearer ${token}` },
@@ -349,14 +369,13 @@ export const getDailyDestinations = async (): Promise<Destination[]> => {
   return payload.Data;
 };
 
-// Row Formatter
-const formatRow = (
+// --- LOGIC FOR FORMAT 1: "GOOD / BAD" (Original Code) ---
+const formatGoodBadRow = (
   row: ExcelRow,
   airline: "spicejet" | "indigo",
   email: string,
   destinations: Destination[],
 ) => {
-  // Dynamically find columns in case of typos in the input file (e.g. "Desstination" -> "Destination")
   const destKey =
     Object.keys(row).find((k) => /dest.*tion|sector/i.test(k)) ||
     "Desstination";
@@ -371,7 +390,6 @@ const formatRow = (
   let fromCode = "";
   let toCode = "";
 
-  // Attempt 1: Look for exact match from the 'FDestName' API property
   const normalizedDest = normalize(rawDest);
   const exactMatch = destinations.find(
     (d) => normalize(d.FDestName) === normalizedDest,
@@ -381,7 +399,6 @@ const formatRow = (
     fromCode = exactMatch.FromCode;
     toCode = exactMatch.ToCode;
   } else {
-    // Attempt 2: Split "Dubai // Delhi" and attempt independent lookups
     const parts = rawDest.split(/\s*(?:\/\/|-)\s*/);
     const rawFrom = parts[0] || "";
     const rawTo = parts[1] || "";
@@ -395,9 +412,8 @@ const formatRow = (
       );
       if (match?.FromCode) return match.FromCode;
       if (match?.ToCode) return match.ToCode;
-      return cityName; 
+      return cityName;
     };
-
     fromCode = findCityCode(rawFrom);
     toCode = findCityCode(rawTo);
   }
@@ -406,13 +422,10 @@ const formatRow = (
   const flightParts = rawFlight
     .split(/\s*\+\s*/)
     .filter((p) => p.trim() !== "");
-
   let flightRoute = "Non - Stop";
-  if (flightParts.length === 2) {
-    flightRoute = "1 Stop";
-  } else if (flightParts.length > 2) {
+  if (flightParts.length === 2) flightRoute = "1 Stop";
+  else if (flightParts.length > 2)
     flightRoute = `${flightParts.length - 1} - Stops`;
-  }
 
   const output: Record<string, string> = {
     "Sector From": fromCode.toUpperCase(),
@@ -425,17 +438,69 @@ const formatRow = (
     FlightRoute: flightRoute,
   };
 
-  if (airline === "spicejet") {
-    output["Email ID"] = email;
-  }
-
+  if (airline === "spicejet") output["Email ID"] = email;
   return output;
 };
 
+// --- LOGIC FOR FORMAT 2: "PURCHASE DATA" (New Code) ---
+const formatPurchaseRow = (
+  row: ExcelRow,
+  airline: "spicejet" | "indigo",
+  email: string,
+  destinations: Destination[],
+) => {
+  const pnrKey = Object.keys(row).find((k) => /pnr/i.test(k)) || "PNR";
+  const flightKey =
+    Object.keys(row).find((k) => /flight/i.test(k)) || "FLIGHTNUMBER";
+  const dateKey =
+    Object.keys(row).find((k) => /travel.*date/i.test(k)) || "TRAVELDATE";
+  const sectorKey = Object.keys(row).find((k) => /sector/i.test(k)) || "SECTOR";
+
+  // Split "VNSBLR" exactly in half
+  const rawSector = String(row[sectorKey] || "").trim();
+  let fromCode = rawSector.substring(0, 3).toUpperCase();
+  let toCode = rawSector.substring(3, 6).toUpperCase();
+
+  // Validate the code against the destination list just to be safe
+  const fromMatch = destinations.find(
+    (d) => String(d.FromCode).toUpperCase() === fromCode,
+  );
+  const toMatch = destinations.find(
+    (d) => String(d.ToCode).toUpperCase() === toCode,
+  );
+  if (fromMatch?.FromCode) fromCode = fromMatch.FromCode;
+  if (toMatch?.ToCode) toCode = toMatch.ToCode;
+
+  const rawFlight = String(row[flightKey] || "").trim();
+  const flightParts = rawFlight
+    .split(/\s*\+\s*/)
+    .filter((p) => p.trim() !== "");
+  let flightRoute = "Non - Stop";
+  if (flightParts.length === 2) flightRoute = "1 Stop";
+  else if (flightParts.length > 2)
+    flightRoute = `${flightParts.length - 1} - Stops`;
+
+  const output: Record<string, string> = {
+    "Sector From": fromCode,
+    "Sector To": toCode,
+    PNR: String(row[pnrKey] || ""),
+    Flight: rawFlight,
+    TravelDate: formatDate(row[dateKey]),
+    Dep: "01:00", // Hardcoded per requirements
+    Arr: "02:45", // Hardcoded per requirements
+    FlightRoute: flightRoute,
+  };
+
+  if (airline === "spicejet") output["Email ID"] = email;
+  return output;
+};
+
+// --- MAIN ENTRY POINT ---
 export const formatAirlineWorkbook = async (
   input: Buffer,
   airline: "spicejet" | "indigo",
   email: string,
+  formatType: "goodBad" | "purchaseData", // Determines which path to take
 ) => {
   const destinations = await getDailyDestinations();
 
@@ -443,18 +508,17 @@ export const formatAirlineWorkbook = async (
   const worksheet = workbook.Sheets[workbook.SheetNames[0]];
   if (!worksheet) throw new Error("The uploaded workbook has no worksheet");
 
-  // --- DYNAMIC HEADER DETECTION LOGIC ---
   const rawData = XLSX.utils.sheet_to_json<any[]>(worksheet, { header: 1 });
-
   let headerRowIndex = 0;
 
+  // Dynamic Header Location
   for (let i = 0; i < rawData.length; i++) {
     if (!Array.isArray(rawData[i])) continue;
-
     const rowStr = rawData[i]
       .map((cell) => String(cell || "").toLowerCase())
       .join(" ");
 
+    // Looks for 'pnr' and either 'sector', 'flight', or 'dest' to identify the table header row
     if (
       rowStr.includes("pnr") &&
       (rowStr.includes("flight") ||
@@ -466,40 +530,39 @@ export const formatAirlineWorkbook = async (
     }
   }
 
-  // Instruct xlsx to parse object rows beginning specifically at the header index
-  const rows = XLSX.utils.sheet_to_json<ExcelRow>(worksheet, {
+  const parsedRows = XLSX.utils.sheet_to_json<ExcelRow>(worksheet, {
     range: headerRowIndex,
     defval: "",
   });
 
-  // --- FILTER OUT JUNK / TOTAL ROWS ---
-  const validRows = rows.filter((row) => {
-    // 1. Check if the row contains "Total" or "Total:" anywhere
+  // Filter out empty rows and total rows
+  const validRows = parsedRows.filter((row) => {
     const isTotalRow = Object.values(row).some((val) => {
       const cleaned = String(val).toLowerCase().replace(/\s+/g, "");
-      return cleaned === "total:" || cleaned === "total" || cleaned.includes("total:");
+      return (
+        cleaned === "total:" ||
+        cleaned === "total" ||
+        cleaned.includes("total:")
+      );
     });
 
-    // 2. Also ensure the row actually has data (like a PNR or Destination) 
-    // This stops it from formatting fully blank rows at the very bottom
     const pnrKey = Object.keys(row).find((k) => /pnr/i.test(k)) || "PNR";
     const destKey =
-      Object.keys(row).find((k) => /dest.*tion|sector/i.test(k)) ||
-      "Desstination";
+      Object.keys(row).find((k) => /dest.*tion|sector/i.test(k)) || "SECTOR";
 
     const hasData =
       String(row[pnrKey] || "").trim() !== "" ||
       String(row[destKey] || "").trim() !== "";
-
-    return !isTotalRow && hasData; // Keep row ONLY if it is not a total row AND contains valid data
+    return !isTotalRow && hasData;
   });
-  // ------------------------------------
 
-  // Map over only the valid rows
+  // Map the rows depending on which dropdown option the user selected in the UI
   const formattedRows = validRows.map((row) =>
-    formatRow(row, airline, email, destinations),
+    formatType === "purchaseData"
+      ? formatPurchaseRow(row, airline, email, destinations)
+      : formatGoodBadRow(row, airline, email, destinations),
   );
-  
+
   const outputSheet = XLSX.utils.json_to_sheet(formattedRows);
   const outputWorkbook = XLSX.utils.book_new();
 
