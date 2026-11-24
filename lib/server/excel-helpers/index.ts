@@ -576,7 +576,7 @@ export function transformData(
           "FIRST NAME": record["FIRST NAME"],
           "MIDDLE NAME": record["MIDDLE NAME"],
           "LAST NAME": record["LAST NAME"],
-          "DOB (DD/MM/YYYY)": record["DOB (DD/MM/YYYY)"],
+          "DOB (DD/MM/YYYY)": "29/10/1999",
           GENDER: record.GENDER,
         };
 
