@@ -560,6 +560,7 @@ export function transformData(
         // record["CITIZENSHIP"] = "INDIA";
 
         delete record["SL"];
+        delete record["DOB (DD/MM/YYYY)"];
         delete record["Billing A/C"];
         delete record["Login ID"];
         delete record["Price"];
